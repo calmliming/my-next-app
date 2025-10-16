@@ -1,15 +1,15 @@
 // app/api/posts/[id]/route.ts
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getDb } from '../../../../lib/db';
 import { Code, ObjectId } from 'mongodb'; // 新增：用于处理MongoDB的ID
 
 // 获取单篇文章详情（供编辑表单使用）
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } } // 从URL中获取文章ID
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> } // 从URL中获取文章ID
 ) {
   try {
-    const postId = params.id;
+    const postId = (await params).id;
 
     // 验证ID格式（MongoDB的ID是24位字符串）
     if (!ObjectId.isValid(postId)) {
@@ -41,11 +41,11 @@ export async function GET(
 
 // 修改文章（处理PUT请求）
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }:  { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id;
+    const postId = (await params).id;
     const updateData = await request.json(); // 获取修改后的内容
 
     // 验证ID和数据
@@ -92,11 +92,11 @@ export async function PUT(
 
 // 删除文章（处理DELETE请求）
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const postId = params.id;
+    const postId = (await params).id;
 
     // 验证ID
     if (!ObjectId.isValid(postId)) {

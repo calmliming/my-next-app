@@ -170,7 +170,13 @@ export default function HomePage() {
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                style={styles.textarea}
+                style={{
+                  padding: '8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  resize: 'vertical',
+                }}
                 placeholder='请输入内容'
                 rows={5}
                 disabled={submitting}
@@ -281,12 +287,12 @@ const styles = {
   },
   form: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column' as const,
     gap: '15px',
   },
   formItem: {
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'column' as const,
     gap: '5px',
   },
   input: {
