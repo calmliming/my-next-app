@@ -26,7 +26,7 @@ export async function GET() {
       .find()
       .sort({ createdAt: -1 })
       .toArray();
-   console.log('posts:', posts);
+    console.log('posts:', posts);
     const formattedPosts: Post[] = posts.map((post) => ({
       _id: post._id.toString(),
       title: post.title,
