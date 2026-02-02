@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const includeInactive =
       request.nextUrl.searchParams.get('includeInactive') === '1';
 
-    await ensureSeeded();
+    // await ensureSeeded();
     const db = await getDb();
     const col = db.collection('menuItems');
 
@@ -127,4 +127,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
