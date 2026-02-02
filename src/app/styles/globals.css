@@ -1,7 +1,20 @@
-* {
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 只重置特定元素，避免覆盖 Tailwind 工具类 */
+html,
+body,
+h1, h2, h3, h4, h5, h6,
+p, ul, ol, li,
+blockquote, pre {
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+}
+
+body {
   font-family: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
 }
 

@@ -1,7 +1,7 @@
 // app/api/posts/[id]/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import { getDb } from '../../../../lib/db';
-import { Code, ObjectId } from 'mongodb'; // 新增：用于处理MongoDB的ID
+import { ObjectId } from 'mongodb'; // 用于处理MongoDB的ID
 
 // 获取单篇文章详情（供编辑表单使用）
 export async function GET(
