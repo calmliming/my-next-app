@@ -52,7 +52,6 @@ export default function AdminMenuPageClient() {
       setUploading(false);
     }
   };
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;

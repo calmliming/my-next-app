@@ -204,7 +204,7 @@ export default function OrderPageClient() {
               <p className='text-xs text-gray-500 mt-0.5'>地道湘味 · 辣得过瘾</p>
             </div>
             <span className='text-xs bg-amber-400 text-gray-900 px-2.5 py-1 rounded font-medium'>
-              堂食点餐
+              点餐
             </span>
           </div>
 

@@ -24,6 +24,28 @@ export default function OrderHistoryClient() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定要删除这条订单记录吗？')) return;
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/orders/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json.msg || '删除失败');
+      }
+
+      // 从列表中移除
+      setOrders((prev) => prev.filter((o) => o.id !== id));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -120,10 +142,19 @@ export default function OrderHistoryClient() {
                   ))}
                 </div>
                 <div className='px-4 py-3 bg-gray-50 flex justify-between items-center'>
-                  <span className='text-sm font-bold text-gray-900'>合计</span>
-                  <span className='text-lg font-extrabold text-red-600'>
-                    ¥{order.totalPrice}
-                  </span>
+                  <div className='flex items-center gap-2'>
+                    <span className='text-sm font-bold text-gray-900'>合计</span>
+                    <span className='text-lg font-extrabold text-red-600'>
+                      ¥{order.totalPrice}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(order.id)}
+                    disabled={deletingId === order.id}
+                    className='text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-100 disabled:opacity-50'
+                  >
+                    {deletingId === order.id ? '删除中...' : '删除'}
+                  </button>
                 </div>
               </div>
             ))}
