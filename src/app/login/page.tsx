@@ -28,8 +28,7 @@ export default function LoginPage() {
         throw new Error(data.msg || '登录失败');
       }
 
-      // 登录成功，跳转到管理后台
-      router.push('/local/admin/menu');
+      router.push('/admin/menu');
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {

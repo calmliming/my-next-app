@@ -1,3 +1,4 @@
+import type { NextRequest } from 'next/server';
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 
@@ -27,4 +28,12 @@ export async function verifyToken(token: string): Promise<any> {
   } catch (error) {
     return null;
   }
+}
+
+/** 管理端接口：校验 Cookie 中的 admin_token */
+export async function isAdminRequest(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get('admin_token')?.value;
+  if (!token) return false;
+  const payload = await verifyToken(token);
+  return payload != null;
 }

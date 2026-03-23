@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import '@/app/styles/globals.css';
 import './globals.css';
-import GlobalNav from '@/components/layout/GlobalNav';
 
 export const metadata: Metadata = {
   title: '小罗的小世界',
@@ -15,10 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='zh-CN'>
-      <body className='antialiased'>
-        {children}
-        <GlobalNav />
-      </body>
+      <body className='antialiased'>{children}</body>
     </html>
   );
 }

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import AdminLogoutButton from '@/components/admin/AdminLogoutButton';
 import { categories, getCategoryName, type MenuItem } from '@/lib/menu';
 
 type FormState = {
@@ -194,7 +195,13 @@ export default function AdminMenuPageClient() {
           </div>
           <div className='flex items-center gap-2 shrink-0'>
             <Link
-              href='/local/order'
+              href='/admin/orders'
+              className='rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-800 hover:bg-gray-50'
+            >
+              点菜记录
+            </Link>
+            <Link
+              href='/order'
               className='rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white'
             >
               去点菜
@@ -206,6 +213,7 @@ export default function AdminMenuPageClient() {
             >
               新增菜品
             </button>
+            <AdminLogoutButton />
           </div>
         </div>
       </header>

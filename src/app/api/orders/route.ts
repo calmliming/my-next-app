@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/db';
+import { isAdminRequest } from '@/lib/auth';
 
 type CreateOrderPayload = {
   items: Array<{ menuItemId: string; quantity: number }>;
@@ -15,14 +16,20 @@ function isPositiveInt(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v > 0;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    if (!(await isAdminRequest(request))) {
+      return NextResponse.json(
+        { code: 401, data: null, msg: '需要管理员登录' },
+        { status: 401 }
+      );
+    }
     const db = await getDb();
     const orders = await db
       .collection('orders')
       .find()
       .sort({ createdAt: -1 })
-      .limit(50)
+      .limit(100)
       .toArray();
 
     return NextResponse.json({
@@ -34,6 +41,7 @@ export async function GET() {
         note: o.note ?? '',
         status: o.status ?? 'new',
         createdAt: new Date(o.createdAt).toISOString(),
+        updatedAt: o.updatedAt ? new Date(o.updatedAt).toISOString() : null,
       })),
       msg: '订单列表读取成功',
     });

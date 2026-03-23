@@ -438,8 +438,17 @@ export default function OrderPageClient() {
                     return (
                       <li
                         key={id}
-                        className='flex justify-between items-center py-3 border-b border-gray-100 last:border-0'
+                        className='flex items-center gap-3 py-3 border-b border-gray-100 last:border-0'
                       >
+                        <div className='relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-gray-100'>
+                          <Image
+                            src={item.img}
+                            alt={item.name}
+                            fill
+                            sizes='56px'
+                            className='object-cover'
+                          />
+                        </div>
                         <div className='flex-1 min-w-0'>
                           <div className='font-medium text-gray-900'>{item.name}</div>
                           <div className='text-xs text-gray-500'>
