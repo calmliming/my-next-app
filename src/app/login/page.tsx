@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { IconChili } from '@/components/ui/icons';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -37,43 +38,45 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='min-h-screen flex items-center justify-center bg-gray-100 px-4'>
-      <div className='max-w-md w-full bg-white rounded-2xl shadow-lg p-8'>
-        <div className='text-center mb-8'>
-          <h1 className='text-2xl font-bold text-gray-900'>管理员登录</h1>
-          <p className='text-sm text-gray-500 mt-2'>请输入您的账号和密码</p>
+    <div className='flex min-h-screen items-center justify-center bg-paper px-4'>
+      <div className='w-full max-w-md'>
+        <div className='mb-8 text-center'>
+          <span className='inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-ember text-white shadow-card'>
+            <IconChili className='h-7 w-7' />
+          </span>
+          <h1 className='font-display mt-4 text-2xl font-bold text-ink'>商家管理后台</h1>
+          <p className='mt-1.5 text-sm text-ink-soft'>洁洁的美食小世界 · 请登录</p>
         </div>
 
-        <form onSubmit={handleSubmit} className='space-y-6'>
+        <form
+          onSubmit={handleSubmit}
+          className='space-y-5 rounded-3xl border border-line bg-surface p-7 shadow-card'
+        >
           {error && (
-            <div className='bg-red-50 text-red-600 text-sm p-3 rounded-lg text-center'>
+            <div className='rounded-xl bg-ember-soft px-4 py-3 text-center text-sm text-ember'>
               {error}
             </div>
           )}
 
           <div>
-            <label className='block text-sm font-medium text-gray-700 mb-1'>
-              用户名
-            </label>
+            <label className='mb-1.5 block text-sm font-semibold text-ink'>用户名</label>
             <input
               type='text'
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all'
+              className='w-full rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink outline-none transition-colors focus:border-ember/50 focus:bg-surface'
               placeholder='请输入用户名'
               required
             />
           </div>
 
           <div>
-            <label className='block text-sm font-medium text-gray-700 mb-1'>
-              密码
-            </label>
+            <label className='mb-1.5 block text-sm font-semibold text-ink'>密码</label>
             <input
               type='password'
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all'
+              className='w-full rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink outline-none transition-colors focus:border-ember/50 focus:bg-surface'
               placeholder='请输入密码'
               required
             />
@@ -82,9 +85,9 @@ export default function LoginPage() {
           <button
             type='submit'
             disabled={loading}
-            className='w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+            className='w-full rounded-full bg-ember py-3 font-bold text-white shadow-card transition-transform active:scale-[0.98] disabled:opacity-50'
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? '登录中…' : '登录'}
           </button>
         </form>
       </div>

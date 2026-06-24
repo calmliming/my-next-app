@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { IconBowl, IconBook, IconUser } from '@/components/ui/icons';
 
 /** 用户端底部导航（不含管理端入口） */
 const navItems = [
-  { href: '/order', label: '点菜', icon: '🌶️' },
-  { href: '/posts', label: '文章', icon: '📚' },
-  { href: '/me', label: '我的', icon: '👤' },
+  { href: '/order', label: '点菜', Icon: IconBowl },
+  { href: '/posts', label: '动态', Icon: IconBook },
+  { href: '/me', label: '我的', Icon: IconUser },
 ];
 
 export default function UserNav() {
@@ -19,42 +20,28 @@ export default function UserNav() {
   }, []);
 
   return (
-    <nav className='fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 shadow-[0_-2px_8px_rgba(0,0,0,0.1)]'>
-      <div className='max-w-6xl mx-auto px-4'>
-        <div className='flex items-center justify-around h-16'>
-          {!mounted
-            ? navItems.map((item) => (
-                <div
-                  key={item.href}
-                  className='relative flex flex-1 flex-col items-center justify-center gap-1 h-full'
-                  aria-hidden
-                >
-                  <span className='text-xl opacity-30 select-none'>{item.icon}</span>
-                  <span className='text-[10px] font-bold text-gray-300 select-none'>
-                    {item.label}
-                  </span>
-                </div>
-              ))
-            : navItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`relative flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
-                      isActive
-                        ? 'text-red-600'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    <span className='text-xl'>{item.icon}</span>
-                    <span className='text-xs font-bold'>{item.label}</span>
-                    {isActive && (
-                      <div className='absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-0.5 bg-red-600 rounded-full' />
-                    )}
-                  </Link>
-                );
-              })}
+    <nav className='safe-bottom fixed bottom-0 left-0 right-0 z-50 border-t border-line bg-surface/95 backdrop-blur'>
+      <div className='mx-auto max-w-6xl px-4'>
+        <div className='flex h-16 items-center justify-around'>
+          {navItems.map(({ href, label, Icon }) => {
+            const isActive = mounted && pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative flex h-full flex-1 flex-col items-center justify-center gap-1 transition-colors ${
+                  isActive ? 'text-ember' : 'text-ink-faint hover:text-ink-soft'
+                }`}
+              >
+                <Icon className='h-6 w-6' strokeWidth={isActive ? 1.9 : 1.6} />
+                <span className='text-[11px] font-semibold'>{label}</span>
+                {isActive && (
+                  <span className='absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-ember' />
+                )}
+              </Link>
+            );
+          })}
         </div>
       </div>
     </nav>

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import { ADMIN_COOKIE_NAME } from '@/lib/auth';
 
 export async function POST() {
   const response = NextResponse.json({ msg: '已退出' });
-  response.cookies.set('admin_token', '', {
+  response.cookies.set(ADMIN_COOKIE_NAME, '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { ADMIN_COOKIE_NAME, verifyToken } from '@/lib/auth';
 
 // 需要保护的路径前缀
 const PROTECTED_PATHS = ['/admin'];
@@ -12,8 +12,8 @@ export async function middleware(request: NextRequest) {
   const isProtected = PROTECTED_PATHS.some((path) => pathname.startsWith(path));
 
   if (isProtected) {
-    const token = request.cookies.get('admin_token')?.value;
-    
+    const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
+
     // 如果没有 Token，重定向到登录页
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url));

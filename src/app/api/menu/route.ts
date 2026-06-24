@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { categories, seedMenuItems, type MenuItemInput } from '@/lib/menu';
+import { isAdminRequest } from '@/lib/auth';
+import { categories, type MenuItemInput } from '@/lib/menu';
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0;
@@ -29,28 +30,18 @@ function normalizeMenuItemInput(payload: unknown): MenuItemInput | null {
   };
 }
 
-async function ensureSeeded() {
-  const db = await getDb();
-  const col = db.collection('menuItems');
-  const count = await col.countDocuments();
-  if (count > 0) return;
-  const now = new Date();
-  await col.insertMany(
-    seedMenuItems.map((item) => ({
-      ...item,
-      isActive: item.isActive ?? true,
-      createdAt: now,
-      updatedAt: now,
-    }))
-  );
-}
-
 export async function GET(request: NextRequest) {
   try {
     const includeInactive =
       request.nextUrl.searchParams.get('includeInactive') === '1';
 
-    // await ensureSeeded();
+    if (includeInactive && !(await isAdminRequest(request))) {
+      return NextResponse.json(
+        { code: 401, data: null, msg: '需要管理员登录' },
+        { status: 401 }
+      );
+    }
+
     const db = await getDb();
     const col = db.collection('menuItems');
 
@@ -86,6 +77,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await isAdminRequest(request))) {
+      return NextResponse.json(
+        { code: 401, data: null, msg: '需要管理员登录' },
+        { status: 401 }
+      );
+    }
+
     const payload = await request.json();
     const input = normalizeMenuItemInput(payload);
     if (!input) {

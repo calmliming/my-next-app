@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { verifyPassword, signToken } from '@/lib/auth';
+import { ADMIN_COOKIE_NAME, verifyPassword, signToken } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // 设置 Cookie
     const response = NextResponse.json({ msg: '登录成功' });
-    response.cookies.set('admin_token', token, {
+    response.cookies.set(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

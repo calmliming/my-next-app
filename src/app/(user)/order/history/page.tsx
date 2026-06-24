@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
+import OrderHistoryPageClient from '@/components/order/OrderHistoryPageClient';
 
-/** 点菜记录已迁至管理后台 */
 export default function OrderHistoryRedirectPage() {
-  redirect('/order');
+  return <OrderHistoryPageClient />;
 }

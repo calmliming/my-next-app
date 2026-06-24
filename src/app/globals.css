@@ -1,26 +1,149 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   洁洁的美食小世界 — 高级餐饮设计系统
+   暖纸色基底 · 窑红主色 · 鎏金点缀 · 衬线标题
+   ============================================================ */
+
+@theme {
+  /* 背景与表面 */
+  --color-paper: #f7f2ea;        /* 暖纸色页面底 */
+  --color-paper-deep: #efe7da;   /* 略深的暖底（分隔区） */
+  --color-surface: #fffdf9;      /* 卡片/弹层表面 */
+
+  /* 文字 */
+  --color-ink: #211b16;          /* 主文字（暖墨） */
+  --color-ink-soft: #6f6258;     /* 次级文字 */
+  --color-ink-faint: #a99c8f;    /* 弱化文字/占位 */
+
+  /* 描边 */
+  --color-line: #e8ddcd;         /* 常规分隔线 */
+  --color-line-strong: #d8c9b3;  /* 强调描边 */
+
+  /* 品牌主色：窑红（辣味餐饮） */
+  --color-ember: #c0392b;
+  --color-ember-strong: #a02a1e;
+  --color-ember-soft: #f6e7e2;   /* 窑红浅底（badge/tint） */
+
+  /* 次级：鎏金 */
+  --color-gold: #b88a3e;
+  --color-gold-soft: #f3ead6;
+
+  /* 语义色（克制使用） */
+  --color-leaf: #4f7a4a;         /* 上架/成功 */
+  --color-leaf-soft: #e7efe3;
+
+  /* 字体族 */
+  --font-display: "Songti SC", "Noto Serif SC", "STSong", "STKaiti", Georgia, serif;
+  --font-sans: "PingFang SC", system-ui, -apple-system, "Noto Sans SC",
+    "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+
+  /* 圆角与阴影（高级感：极柔阴影） */
+  --radius: 0.875rem;
+  --shadow-card: 0 1px 2px rgba(33, 27, 22, 0.04), 0 8px 24px -12px rgba(33, 27, 22, 0.12);
+  --shadow-float: 0 4px 16px -4px rgba(33, 27, 22, 0.12), 0 16px 48px -16px rgba(33, 27, 22, 0.22);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-ember-soft);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-ember) 70%, white);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  transform: translateY(-150%);
+  border-radius: 999px;
+  background: var(--color-ink);
+  color: var(--color-paper);
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-float);
+  transition: transform 0.18s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.above-user-nav {
+  bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+/* 衬线标题工具类 */
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* 数字等宽（价格） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 细腻的卡片阴影工具类 */
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+.shadow-float {
+  box-shadow: var(--shadow-float);
+}
+
+/* 隐藏滚动条 */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 入场动画 */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pop-in {
+  0% { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in { animation: fade-in 0.25s ease forwards; }
+.animate-slide-up { animation: slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-pop-in { animation: pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-pop-in {
+    animation: none;
+  }
 }

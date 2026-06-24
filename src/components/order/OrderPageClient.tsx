@@ -3,8 +3,19 @@
 import Image from 'next/image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { categories, type MenuItem } from '@/lib/menu';
+import {
+  IconChili,
+  IconClose,
+  IconMinus,
+  IconPlus,
+  IconReceipt,
+} from '@/components/ui/icons';
+import { ConfirmDialog } from '@/components/ui/Feedback';
+import { saveOrderHistory } from '@/lib/orderHistory';
 
 type Cart = Record<string, number>;
+
+const CART_STORAGE_KEY = 'order_cart_v1';
 
 function formatPrice(price: number) {
   return price.toFixed(2);
@@ -18,8 +29,10 @@ export default function OrderPageClient() {
   const [loadError, setLoadError] = useState<string>('');
 
   const [cart, setCart] = useState<Cart>({});
+  const [cartHydrated, setCartHydrated] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('stirfry');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [toast, setToast] = useState<ToastState>({
@@ -57,6 +70,32 @@ export default function OrderPageClient() {
     return { totalCount: count, totalPrice: price };
   }, [cart, menuById]);
 
+  // 读取本地暂存的购物车（刷新/返回不丢单）
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CART_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Cart;
+        if (parsed && typeof parsed === 'object') setCart(parsed);
+      }
+    } catch {
+      // 忽略损坏数据
+    } finally {
+      setCartHydrated(true);
+    }
+  }, []);
+
+  // 购物车变化时写回本地
+  useEffect(() => {
+    if (!cartHydrated) return;
+    try {
+      if (Object.keys(cart).length === 0) localStorage.removeItem(CART_STORAGE_KEY);
+      else localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch {
+      // 忽略写入失败
+    }
+  }, [cart, cartHydrated]);
+
   useEffect(() => {
     if (Object.keys(cart).length === 0) setIsCartOpen(false);
   }, [cart]);
@@ -83,6 +122,19 @@ export default function OrderPageClient() {
             items.some((it) => it.isActive && it.categoryId === c.id)
           );
           if (first) setActiveCategory(first.id);
+          // 清理本地购物车里已下架/已删除的菜品
+          const validIds = new Set(
+            items.filter((it) => it.isActive).map((it) => it.id)
+          );
+          setCart((prev) => {
+            const next: Cart = {};
+            let changed = false;
+            for (const [id, qty] of Object.entries(prev)) {
+              if (validIds.has(id) && qty > 0) next[id] = qty;
+              else changed = true;
+            }
+            return changed ? next : prev;
+          });
         }
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : '加载菜品失败');
@@ -151,18 +203,40 @@ export default function OrderPageClient() {
   };
 
   const clearCart = () => {
-    if (!confirm('确定清空已点菜品吗？')) return;
     setCart({});
     setIsCartOpen(false);
+    setConfirmClearOpen(false);
   };
 
   const placeOrder = async () => {
     if (totalCount <= 0 || isPlacingOrder) return;
+    const orderItems = Object.entries(cart)
+      .filter(([, qty]) => qty > 0)
+      .map(([id, quantity]) => {
+        const item = menuById.get(id);
+        if (!item) return null;
+        return {
+          menuItemId: id,
+          name: item.name,
+          quantity,
+          subtotal: item.price * quantity,
+        };
+      })
+      .filter(Boolean) as Array<{
+      menuItemId: string;
+      name: string;
+      quantity: number;
+      subtotal: number;
+    }>;
+    const snapshotTotalCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+    const snapshotTotalPrice = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+
     setIsPlacingOrder(true);
     try {
-      const items = Object.entries(cart)
-        .filter(([, qty]) => qty > 0)
-        .map(([menuItemId, quantity]) => ({ menuItemId, quantity }));
+      const items = orderItems.map(({ menuItemId, quantity }) => ({
+        menuItemId,
+        quantity,
+      }));
 
       const res = await fetch('/api/orders', {
         method: 'POST',
@@ -172,10 +246,25 @@ export default function OrderPageClient() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.msg || '点菜失败');
 
+      const orderId =
+        typeof json?.data?.id === 'string' ? json.data.id : `local-${Date.now()}`;
+      saveOrderHistory({
+        id: orderId,
+        createdAt:
+          typeof json?.data?.createdAt === 'string'
+            ? json.data.createdAt
+            : new Date().toISOString(),
+        totalCount: snapshotTotalCount,
+        totalPrice: snapshotTotalPrice,
+        items: orderItems.map(({ name, quantity, subtotal }) => ({
+          name,
+          quantity,
+          subtotal,
+        })),
+      });
       setCart({});
       setIsCartOpen(false);
-      const suffix =
-        typeof json?.data?.id === 'string' ? json.data.id.slice(-6) : '';
+      const suffix = orderId.startsWith('local-') ? '' : orderId.slice(-6);
       showToast(`点菜成功${suffix ? `（#${suffix}）` : ''}`, 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : '点菜失败', 'error');
@@ -194,37 +283,45 @@ export default function OrderPageClient() {
   const cartItemIds = Object.keys(cart).filter((id) => (cart[id] ?? 0) > 0);
 
   return (
-    <div className='min-h-screen bg-[#f5f5f5] text-gray-800 flex flex-col overflow-hidden pb-32'>
+    <div className='min-h-screen bg-paper text-ink flex flex-col overflow-hidden pb-32'>
       {/* 顶栏：店名 + 堂食点餐 */}
-      <header className='bg-white border-b border-gray-100 z-20'>
-        <div className='max-w-4xl mx-auto px-4 py-3'>
+      <header className='bg-surface/90 backdrop-blur border-b border-line z-20'>
+        <div className='max-w-4xl mx-auto px-4 py-3.5'>
           <div className='flex justify-between items-center'>
-            <div>
-              <h1 className='text-lg font-bold text-gray-900'>洁洁的美食小世界</h1>
-              <p className='text-xs text-gray-500 mt-0.5'>地道湘味 · 辣得过瘾</p>
+            <div className='min-w-0'>
+              <h1 className='font-display text-xl font-bold text-ink tracking-tight'>
+                洁洁的美食小世界
+              </h1>
+              <p className='mt-0.5 flex items-center gap-1 text-xs text-ink-soft'>
+                <IconChili className='h-3.5 w-3.5 text-ember' />
+                地道湘味 · 辣得过瘾
+              </p>
             </div>
-            <span className='text-xs bg-amber-400 text-gray-900 px-2.5 py-1 rounded font-medium'>
-              点餐
+            <span className='shrink-0 inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold-soft px-3 py-1 text-xs font-semibold text-gold'>
+              堂食点餐
             </span>
           </div>
 
           {/* 移动端：分类横向滚动 */}
           <div className='mt-3 md:hidden'>
-            <div className='flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style]:none [scrollbar-width]:none'>
-              {categoriesWithItems.map((cat) => (
-                <button
-                  key={cat.id}
-                  type='button'
-                  onClick={() => scrollToCategory(cat.id)}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                    activeCategory === cat.id
-                      ? 'bg-amber-400 text-gray-900'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+            <div className='no-scrollbar flex gap-2 overflow-x-auto pb-1'>
+              {categoriesWithItems.map((cat) => {
+                const active = activeCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type='button'
+                    onClick={() => scrollToCategory(cat.id)}
+                    className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                      active
+                        ? 'bg-ember text-white shadow-card'
+                        : 'bg-paper-deep text-ink-soft hover:text-ink'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -233,46 +330,66 @@ export default function OrderPageClient() {
       <div className='flex-1 overflow-hidden'>
         <div className='max-w-4xl mx-auto h-full flex overflow-hidden'>
           {/* PC：左侧分类（美团式窄栏） */}
-          <aside className='hidden md:flex w-36 shrink-0 flex-col bg-white border-r border-gray-100'>
-            <div className='flex-1 overflow-y-auto py-2 [&::-webkit-scrollbar]:hidden'>
-              {categoriesWithItems.map((cat) => (
-                <button
-                  key={cat.id}
-                  type='button'
-                  onClick={() => scrollToCategory(cat.id)}
-                  className={`w-full text-left px-3 py-2.5 text-sm font-medium transition-colors border-l-2 ${
-                    activeCategory === cat.id
-                      ? 'border-amber-400 bg-amber-50/80 text-gray-900'
-                      : 'border-transparent text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+          <aside className='hidden md:flex w-40 shrink-0 flex-col bg-surface border-r border-line'>
+            <div className='no-scrollbar flex-1 overflow-y-auto py-3'>
+              {categoriesWithItems.map((cat) => {
+                const active = activeCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type='button'
+                    onClick={() => scrollToCategory(cat.id)}
+                    className={`relative w-full text-left px-4 py-3 text-sm font-semibold transition-colors ${
+                      active
+                        ? 'bg-paper text-ember'
+                        : 'text-ink-soft hover:bg-paper/60 hover:text-ink'
+                    }`}
+                  >
+                    {active && (
+                      <span className='absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-ember' />
+                    )}
+                    {cat.name}
+                  </button>
+                );
+              })}
             </div>
           </aside>
 
           {/* 菜品列表：美团式单列一行一菜 */}
           <main
             ref={mainRef}
-            className='flex-1 overflow-y-auto bg-[#f5f5f5] pb-32 scroll-smooth'
+            className='flex-1 overflow-y-auto bg-paper pb-32 scroll-smooth'
           >
             {loading ? (
-              <div className='p-4 text-sm text-gray-500'>加载中…</div>
+              <div className='p-4 space-y-3'>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className='flex gap-3 rounded-2xl bg-surface p-3 shadow-card'
+                  >
+                    <div className='h-20 w-20 shrink-0 animate-pulse rounded-xl bg-paper-deep' />
+                    <div className='flex-1 space-y-2 py-1'>
+                      <div className='h-4 w-2/3 animate-pulse rounded bg-paper-deep' />
+                      <div className='h-3 w-full animate-pulse rounded bg-paper-deep' />
+                      <div className='h-4 w-16 animate-pulse rounded bg-paper-deep' />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : loadError ? (
-              <div className='m-4 rounded-xl bg-white p-4 shadow-sm'>
-                <div className='text-sm font-bold text-gray-900'>加载失败</div>
-                <div className='mt-1 text-sm text-gray-500'>{loadError}</div>
+              <div className='m-4 rounded-2xl bg-surface p-5 shadow-card'>
+                <div className='text-sm font-bold text-ink'>加载失败</div>
+                <div className='mt-1 text-sm text-ink-soft'>{loadError}</div>
                 <button
                   type='button'
                   onClick={() => window.location.reload()}
-                  className='mt-3 rounded-full bg-amber-400 text-gray-900 px-4 py-2 text-sm font-bold'
+                  className='mt-4 rounded-full bg-ember text-white px-5 py-2 text-sm font-semibold active:scale-95 transition-transform'
                 >
                   刷新重试
                 </button>
               </div>
             ) : menuItems.length === 0 ? (
-              <div className='p-4 text-sm text-gray-500'>暂无菜品</div>
+              <div className='p-10 text-center text-sm text-ink-faint'>暂无菜品</div>
             ) : (
               <div className='p-3 md:p-4'>
                 {categoriesWithItems.map((cat) => {
@@ -281,20 +398,30 @@ export default function OrderPageClient() {
                   );
                   if (items.length === 0) return null;
                   return (
-                    <section key={cat.id} id={`cat-${cat.id}`} className='mb-5'>
-                      <h3 className='text-sm font-bold text-gray-500 px-1 mb-2'>
-                        {cat.name}
-                      </h3>
-                      <div className='space-y-0 overflow-hidden rounded-xl bg-white shadow-sm'>
+                    <section key={cat.id} id={`cat-${cat.id}`} className='mb-6'>
+                      <div className='mb-2.5 flex items-center gap-2 px-1'>
+                        <span className='h-3.5 w-1 rounded-full bg-ember' />
+                        <h3 className='font-display text-base font-bold text-ink'>
+                          {cat.name}
+                        </h3>
+                      </div>
+                      <div className='overflow-hidden rounded-2xl bg-surface shadow-card'>
                         {items.map((item, idx) => {
                           const count = cart[item.id] ?? 0;
                           const isLast = idx === items.length - 1;
                           return (
                             <div
                               key={item.id}
-                              className={`flex items-center gap-3 p-3 ${!isLast ? 'border-b border-gray-100' : ''}`}
+                              className={`flex items-center gap-3 p-3 transition-colors ${
+                                !isLast ? 'border-b border-line' : ''
+                              }`}
                             >
-                              <div className='relative w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-gray-100'>
+                              <button
+                                type='button'
+                                onClick={() => setDetailItem(item)}
+                                className='relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-paper-deep'
+                                aria-label={`查看 ${item.name} 详情`}
+                              >
                                 <Image
                                   src={item.img}
                                   alt={item.name}
@@ -302,39 +429,39 @@ export default function OrderPageClient() {
                                   sizes='80px'
                                   className='object-cover'
                                 />
-                              </div>
+                              </button>
                               <div className='flex-1 min-w-0'>
                                 <button
                                   type='button'
                                   onClick={() => setDetailItem(item)}
                                   className='text-left w-full'
                                 >
-                                  <h4 className='font-semibold text-gray-900 truncate'>
+                                  <h4 className='font-semibold text-ink truncate'>
                                     {item.name}
                                   </h4>
-                                  <p className='text-xs text-gray-500 line-clamp-1 mt-0.5'>
+                                  <p className='mt-0.5 text-xs text-ink-soft line-clamp-1'>
                                     {item.desc}
                                   </p>
-                                  <p className='text-amber-600 font-bold mt-1'>
-                                    ¥{formatPrice(item.price)}
-                                  </p>
-                                  <span className='mt-0.5 inline-block text-[11px] text-amber-600'>
-                                    查看详情
-                                  </span>
                                 </button>
+                                <div className='mt-1.5 flex items-baseline gap-0.5 text-ember'>
+                                  <span className='text-xs font-semibold'>¥</span>
+                                  <span className='tnum text-lg font-bold leading-none'>
+                                    {formatPrice(item.price)}
+                                  </span>
+                                </div>
                               </div>
-                              <div className='flex items-center gap-1.5 shrink-0'>
+                              <div className='flex items-center gap-2 shrink-0'>
                                 {count > 0 ? (
                                   <>
                                     <button
                                       type='button'
                                       onClick={() => updateCart(item.id, -1)}
-                                      className='w-8 h-8 rounded-full border border-amber-400 text-amber-600 flex items-center justify-center text-lg leading-none active:scale-95'
+                                      className='flex h-8 w-8 items-center justify-center rounded-full border border-ember/40 text-ember active:scale-90 transition-transform'
                                       aria-label={`减少 ${item.name}`}
                                     >
-                                      −
+                                      <IconMinus className='h-4 w-4' />
                                     </button>
-                                    <span className='text-sm font-semibold w-5 text-center select-none'>
+                                    <span className='tnum w-5 text-center text-sm font-bold text-ink select-none'>
                                       {count}
                                     </span>
                                   </>
@@ -342,10 +469,10 @@ export default function OrderPageClient() {
                                 <button
                                   type='button'
                                   onClick={() => updateCart(item.id, 1)}
-                                  className='w-8 h-8 rounded-full bg-amber-400 text-gray-900 flex items-center justify-center text-lg leading-none font-bold active:scale-95'
+                                  className='flex h-8 w-8 items-center justify-center rounded-full bg-ember text-white shadow-card active:scale-90 transition-transform'
                                   aria-label={`添加 ${item.name}`}
                                 >
-                                  +
+                                  <IconPlus className='h-4 w-4' />
                                 </button>
                               </div>
                             </div>
@@ -362,7 +489,7 @@ export default function OrderPageClient() {
       </div>
 
       {/* 底部点单栏（在全局底部导航之上） */}
-      <div className='fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 z-40'>
+      <div className='safe-bottom above-user-nav fixed left-0 right-0 z-40 border-t border-line bg-surface/95 backdrop-blur'>
         <div className='max-w-4xl mx-auto px-4 flex items-center gap-4 py-3'>
           <button
             type='button'
@@ -372,20 +499,27 @@ export default function OrderPageClient() {
             }}
           >
             <div className='relative shrink-0'>
-              <div className='w-11 h-11 rounded-full bg-[#f5f5f5] flex items-center justify-center text-xl'>
-                📋
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
+                  totalCount > 0 ? 'bg-ember text-white' : 'bg-paper-deep text-ink-faint'
+                }`}
+              >
+                <IconReceipt className='h-6 w-6' />
               </div>
               {totalCount > 0 && (
-                <span className='absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-gray-900 text-xs font-bold flex items-center justify-center'>
+                <span className='tnum absolute -top-1 -right-1 flex h-[20px] min-w-[20px] items-center justify-center rounded-full border-2 border-surface bg-gold px-1 text-[11px] font-bold text-white'>
                   {totalCount}
                 </span>
               )}
             </div>
             <div className='ml-3 min-w-0'>
-              <div className='text-base font-bold text-gray-900'>
-                ¥<span>{formatPrice(totalPrice)}</span>
+              <div className='flex items-baseline gap-0.5 text-ink'>
+                <span className='text-sm font-semibold'>¥</span>
+                <span className='tnum text-xl font-bold leading-none'>
+                  {formatPrice(totalPrice)}
+                </span>
               </div>
-              <div className='text-xs text-gray-500'>
+              <div className='mt-0.5 text-xs text-ink-soft'>
                 {totalCount > 0 ? `已点 ${totalCount} 道` : '还未点菜'}
               </div>
             </div>
@@ -394,7 +528,7 @@ export default function OrderPageClient() {
             type='button'
             onClick={placeOrder}
             disabled={totalCount <= 0 || isPlacingOrder}
-            className='shrink-0 bg-amber-400 text-gray-900 px-6 py-2.5 rounded-full font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-transform'
+            className='shrink-0 rounded-full bg-ember px-7 py-3 font-bold text-white shadow-card transition-all active:scale-95 disabled:bg-paper-deep disabled:text-ink-faint disabled:shadow-none'
           >
             {totalCount > 0 ? (isPlacingOrder ? '提交中…' : '下单') : '下单'}
           </button>
@@ -404,31 +538,29 @@ export default function OrderPageClient() {
       {/* 已点菜品抽屉 */}
       {isCartOpen && (
         <div
-          className='fixed inset-0 bg-black/40 z-50 flex flex-col justify-end'
+          className='fixed inset-0 z-50 flex flex-col justify-end bg-ink/40 animate-fade-in'
           onClick={() => setIsCartOpen(false)}
           role='dialog'
           aria-modal='true'
           aria-label='已点菜品'
         >
           <div
-            className='bg-white rounded-t-2xl shadow-xl max-h-[65vh] flex flex-col'
+            className='flex max-h-[65vh] flex-col rounded-t-3xl bg-surface shadow-float animate-slide-up'
             onClick={(e) => e.stopPropagation()}
           >
-            <div className='flex justify-between items-center px-4 py-3 border-b border-gray-100'>
-              <span className='font-semibold text-gray-900'>已点菜品</span>
+            <div className='flex items-center justify-between border-b border-line px-5 py-4'>
+              <span className='font-display text-base font-bold text-ink'>已点菜品</span>
               <button
                 type='button'
-                className='text-sm text-amber-600'
-                onClick={clearCart}
+                className='text-sm font-medium text-ink-soft hover:text-ember'
+                onClick={() => setConfirmClearOpen(true)}
               >
                 清空
               </button>
             </div>
-            <div className='overflow-y-auto flex-1 px-4'>
+            <div className='flex-1 overflow-y-auto px-5'>
               {cartItemIds.length === 0 ? (
-                <div className='text-center text-gray-400 py-10 text-sm'>
-                  还未点菜
-                </div>
+                <div className='py-12 text-center text-sm text-ink-faint'>还未点菜</div>
               ) : (
                 <ul className='py-2'>
                   {cartItemIds.map((id) => {
@@ -438,9 +570,9 @@ export default function OrderPageClient() {
                     return (
                       <li
                         key={id}
-                        className='flex items-center gap-3 py-3 border-b border-gray-100 last:border-0'
+                        className='flex items-center gap-3 border-b border-line py-3 last:border-0'
                       >
-                        <div className='relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-gray-100'>
+                        <div className='relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-paper-deep'>
                           <Image
                             src={item.img}
                             alt={item.name}
@@ -450,8 +582,8 @@ export default function OrderPageClient() {
                           />
                         </div>
                         <div className='flex-1 min-w-0'>
-                          <div className='font-medium text-gray-900'>{item.name}</div>
-                          <div className='text-xs text-gray-500'>
+                          <div className='font-medium text-ink truncate'>{item.name}</div>
+                          <div className='tnum mt-0.5 text-xs text-ember font-semibold'>
                             ¥{formatPrice(item.price)} × {qty}
                           </div>
                         </div>
@@ -459,19 +591,21 @@ export default function OrderPageClient() {
                           <button
                             type='button'
                             onClick={() => updateCart(item.id, -1)}
-                            className='w-7 h-7 rounded-full border border-gray-300 text-gray-500 flex items-center justify-center active:scale-95'
+                            className='flex h-7 w-7 items-center justify-center rounded-full border border-line-strong text-ink-soft active:scale-90 transition-transform'
                             aria-label={`减少 ${item.name}`}
                           >
-                            −
+                            <IconMinus className='h-3.5 w-3.5' />
                           </button>
-                          <span className='text-sm w-5 text-center'>{qty}</span>
+                          <span className='tnum w-5 text-center text-sm font-semibold text-ink'>
+                            {qty}
+                          </span>
                           <button
                             type='button'
                             onClick={() => updateCart(item.id, 1)}
-                            className='w-7 h-7 rounded-full bg-amber-400 text-gray-900 flex items-center justify-center active:scale-95 font-medium'
+                            className='flex h-7 w-7 items-center justify-center rounded-full bg-ember text-white active:scale-90 transition-transform'
                             aria-label={`添加 ${item.name}`}
                           >
-                            +
+                            <IconPlus className='h-3.5 w-3.5' />
                           </button>
                         </div>
                       </li>
@@ -480,7 +614,7 @@ export default function OrderPageClient() {
                 </ul>
               )}
             </div>
-            <div className='p-4 border-t border-gray-100'>
+            <div className='border-t border-line p-4'>
               <button
                 type='button'
                 onClick={() => {
@@ -488,9 +622,10 @@ export default function OrderPageClient() {
                   placeOrder();
                 }}
                 disabled={totalCount <= 0 || isPlacingOrder}
-                className='w-full py-3 rounded-full bg-amber-400 text-gray-900 font-bold disabled:opacity-50'
+                className='flex w-full items-center justify-center gap-2 rounded-full bg-ember py-3.5 font-bold text-white shadow-card transition-all active:scale-[0.98] disabled:opacity-50'
               >
-                确认点菜 ¥{formatPrice(totalPrice)}
+                确认点菜
+                <span className='tnum'>¥{formatPrice(totalPrice)}</span>
               </button>
             </div>
           </div>
@@ -500,17 +635,17 @@ export default function OrderPageClient() {
       {/* 菜品详情弹窗 */}
       {detailItem && (
         <div
-          className='fixed inset-0 bg-black/40 z-[55] flex items-center justify-center px-4'
+          className='fixed inset-0 z-[55] flex items-center justify-center px-4 bg-ink/40 animate-fade-in'
           onClick={() => setDetailItem(null)}
           role='dialog'
           aria-modal='true'
           aria-label='菜品详情'
         >
           <div
-            className='w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden'
+            className='w-full max-w-sm overflow-hidden rounded-3xl bg-surface shadow-float animate-pop-in'
             onClick={(e) => e.stopPropagation()}
           >
-            <div className='relative w-full h-40 bg-gray-100'>
+            <div className='relative h-48 w-full bg-paper-deep'>
               <Image
                 src={detailItem.img}
                 alt={detailItem.name}
@@ -518,35 +653,32 @@ export default function OrderPageClient() {
                 sizes='(max-width: 768px) 100vw, 400px'
                 className='object-cover'
               />
+              <div className='absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-ink/30 to-transparent' />
               <button
                 type='button'
                 onClick={() => setDetailItem(null)}
-                className='absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white text-xs flex items-center justify-center'
+                className='absolute top-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-ink/50 text-white backdrop-blur'
                 aria-label='关闭'
               >
-                ✕
+                <IconClose className='h-4 w-4' />
               </button>
             </div>
-            <div className='p-4 space-y-2'>
+            <div className='space-y-2 p-5'>
               <div className='flex items-start justify-between gap-3'>
-                <div className='min-w-0'>
-                  <h3 className='font-bold text-base text-gray-900 break-words'>
-                    {detailItem.name}
-                  </h3>
-                </div>
-                <div className='shrink-0 text-amber-600 font-extrabold'>
+                <h3 className='font-display min-w-0 break-words text-lg font-bold text-ink'>
+                  {detailItem.name}
+                </h3>
+                <div className='tnum shrink-0 text-xl font-bold text-ember'>
                   ¥{formatPrice(detailItem.price)}
                 </div>
               </div>
-              <p className='text-xs text-gray-500 leading-relaxed'>
-                {detailItem.desc}
-              </p>
+              <p className='text-sm leading-relaxed text-ink-soft'>{detailItem.desc}</p>
             </div>
-            <div className='px-4 pb-4 pt-1 flex gap-3'>
+            <div className='flex gap-3 px-5 pb-5 pt-1'>
               <button
                 type='button'
                 onClick={() => setDetailItem(null)}
-                className='flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
+                className='flex-1 rounded-full border border-line-strong px-4 py-2.5 text-sm font-semibold text-ink-soft hover:bg-paper'
               >
                 返回
               </button>
@@ -556,7 +688,7 @@ export default function OrderPageClient() {
                   updateCart(detailItem.id, 1);
                   setDetailItem(null);
                 }}
-                className='flex-1 rounded-full bg-amber-400 px-4 py-2 text-sm font-bold text-gray-900 hover:bg-amber-300 active:scale-95 transition-transform'
+                className='flex-1 rounded-full bg-ember px-4 py-2.5 text-sm font-bold text-white shadow-card transition-transform active:scale-95'
               >
                 加入点单
               </button>
@@ -568,13 +700,22 @@ export default function OrderPageClient() {
       {/* Toast */}
       {toast.visible && (
         <div
-          className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-lg text-sm z-[60] shadow-lg ${
-            toast.tone === 'success' ? 'bg-gray-900 text-white' : 'bg-red-600 text-white'
+          className={`fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 rounded-xl px-5 py-2.5 text-sm font-medium shadow-float animate-pop-in ${
+            toast.tone === 'success' ? 'bg-ink text-paper' : 'bg-ember text-white'
           }`}
         >
           {toast.message}
         </div>
       )}
+      <ConfirmDialog
+        open={confirmClearOpen}
+        title='清空已点菜品'
+        description='确定清空当前点单吗？已经选择的菜品会从购物车移除。'
+        confirmText='清空'
+        danger
+        onCancel={() => setConfirmClearOpen(false)}
+        onConfirm={clearCart}
+      />
     </div>
   );
 }

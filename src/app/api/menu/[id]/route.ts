@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Document, type Filter } from 'mongodb';
 import { getDb } from '@/lib/db';
+import { isAdminRequest } from '@/lib/auth';
 import { categories } from '@/lib/menu';
 
 function isNonEmptyString(v: unknown): v is string {
@@ -53,6 +54,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!(await isAdminRequest(request))) {
+      return NextResponse.json(
+        { code: 401, data: null, msg: '需要管理员登录' },
+        { status: 401 }
+      );
+    }
+
     const id = (await params).id;
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ code: 400, data: null, msg: '无效的菜品ID' }, { status: 400 });
@@ -141,6 +149,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    if (!(await isAdminRequest(request))) {
+      return NextResponse.json(
+        { code: 401, data: null, msg: '需要管理员登录' },
+        { status: 401 }
+      );
+    }
+
     const id = (await params).id?.trim?.() ?? '';
     if (!id) {
       return NextResponse.json({ code: 400, data: null, msg: '无效的菜品ID' }, { status: 400 });
@@ -154,7 +169,7 @@ export async function DELETE(
     }
     if (result.deletedCount === 0) {
       // 兼容 _id 存为字符串的历史数据
-      result = await col.deleteOne({ _id: id } as unknown as import('mongodb').Filter<import('mongodb').Document>);
+      result = await col.deleteOne({ _id: id } as unknown as Filter<Document>);
     }
     if (result.deletedCount === 0) {
       return NextResponse.json({ code: 404, data: null, msg: '菜品不存在' }, { status: 404 });

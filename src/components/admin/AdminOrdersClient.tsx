@@ -2,7 +2,13 @@
 
 import AdminLogoutButton from '@/components/admin/AdminLogoutButton';
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { IconReceipt } from '@/components/ui/icons';
+import {
+  ConfirmDialog,
+  InlineNotice,
+  type NoticeTone,
+} from '@/components/ui/Feedback';
 
 type OrderItem = {
   menuItemId: string;
@@ -23,12 +29,23 @@ type Order = {
   updatedAt: string | null;
 };
 
+const statusMeta: Record<string, { label: string; cls: string }> = {
+  new: { label: '待制作', cls: 'bg-ember-soft text-ember' },
+  cooking: { label: '制作中', cls: 'bg-gold-soft text-gold' },
+  done: { label: '已上菜', cls: 'bg-leaf-soft text-leaf' },
+};
+
 export default function AdminOrdersClient() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
+  const [notice, setNotice] = useState<{ message: string; tone: NoticeTone }>({
+    message: '',
+    tone: 'info',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,6 +65,13 @@ export default function AdminOrdersClient() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // 统计：待处理订单数 / 今日营业额
+  const stats = useMemo(() => {
+    const pending = orders.filter((o) => o.status !== 'done').length;
+    const revenue = orders.reduce((sum, o) => sum + (o.totalPrice ?? 0), 0);
+    return { pending, revenue, total: orders.length };
+  }, [orders]);
 
   const patchStatus = async (id: string, status: 'new' | 'cooking' | 'done') => {
     setUpdatingId(id);
@@ -72,31 +96,36 @@ export default function AdminOrdersClient() {
             : o
         )
       );
+      setNotice({ message: '订单状态已更新', tone: 'success' });
     } catch (e) {
-      alert(e instanceof Error ? e.message : '更新失败');
+      setNotice({
+        message: e instanceof Error ? e.message : '更新失败',
+        tone: 'error',
+      });
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这条订单记录吗？')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
 
-    setDeletingId(id);
+    setDeletingId(deleteTarget.id);
     try {
-      const res = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/orders/${encodeURIComponent(deleteTarget.id)}`, {
         method: 'DELETE',
         credentials: 'include',
       });
       const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.msg || '删除失败');
-      }
-
-      setOrders((prev) => prev.filter((o) => o.id !== id));
+      if (!res.ok) throw new Error(json.msg || '删除失败');
+      setOrders((prev) => prev.filter((o) => o.id !== deleteTarget.id));
+      setNotice({ message: `订单 #${deleteTarget.id.slice(-6)} 已删除`, tone: 'success' });
+      setDeleteTarget(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败');
+      setNotice({
+        message: err instanceof Error ? err.message : '删除失败',
+        tone: 'error',
+      });
     } finally {
       setDeletingId(null);
     }
@@ -105,7 +134,6 @@ export default function AdminOrdersClient() {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleString('zh-CN', {
-      year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -113,31 +141,31 @@ export default function AdminOrdersClient() {
     });
   };
 
-  const statusLabel: Record<string, string> = {
-    new: '待制作',
-    cooking: '制作中',
-    done: '已上菜',
-  };
-
   return (
-    <div className='min-h-screen bg-gray-100 text-gray-900 pb-24'>
-      <header className='bg-white border-b border-gray-200 sticky top-0 z-20'>
-        <div className='max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3'>
+    <div className='min-h-screen bg-paper pb-24 text-ink'>
+      <header className='sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur'>
+        <div className='mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4'>
           <div className='min-w-0'>
-            <h1 className='text-lg font-extrabold text-gray-900'>点菜记录</h1>
-            <p className='text-xs text-gray-500 mt-0.5'>后厨接单、上菜与删单</p>
+            <h1 className='font-display text-xl font-bold'>点菜记录</h1>
+            <p className='text-xs text-ink-soft'>后厨接单、上菜与删单</p>
           </div>
-          <div className='flex items-center gap-2 shrink-0'>
+          <div className='flex shrink-0 items-center gap-2'>
             <Link
               href='/admin/menu'
-              className='rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-800 hover:bg-gray-50'
+              className='rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-semibold text-ink hover:bg-paper'
             >
               菜品管理
+            </Link>
+            <Link
+              href='/admin/posts'
+              className='rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-semibold text-ink hover:bg-paper'
+            >
+              店家动态
             </Link>
             <button
               type='button'
               onClick={() => load()}
-              className='rounded-full bg-gray-900 px-4 py-2 text-sm font-bold text-white'
+              className='rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper transition-opacity hover:opacity-90'
             >
               刷新
             </button>
@@ -146,93 +174,146 @@ export default function AdminOrdersClient() {
         </div>
       </header>
 
-      <div className='max-w-6xl mx-auto px-4 py-4'>
+      <div className='mx-auto max-w-6xl px-4 py-5'>
+        {/* 概览统计 */}
+        {!loading && !error && orders.length > 0 && (
+          <div className='mb-5 grid grid-cols-3 gap-3'>
+            <div className='rounded-2xl border border-line bg-surface p-4 shadow-card'>
+              <div className='text-xs text-ink-soft'>待处理</div>
+              <div className='tnum mt-1 text-2xl font-bold text-ember'>{stats.pending}</div>
+            </div>
+            <div className='rounded-2xl border border-line bg-surface p-4 shadow-card'>
+              <div className='text-xs text-ink-soft'>订单总数</div>
+              <div className='tnum mt-1 text-2xl font-bold text-ink'>{stats.total}</div>
+            </div>
+            <div className='rounded-2xl border border-line bg-surface p-4 shadow-card'>
+              <div className='text-xs text-ink-soft'>累计营业额</div>
+              <div className='tnum mt-1 text-2xl font-bold text-gold'>
+                ¥{stats.revenue.toFixed(0)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {notice.message ? (
+          <div className='mb-4'>
+            <InlineNotice
+              message={notice.message}
+              tone={notice.tone}
+              onDismiss={() => setNotice({ message: '', tone: 'info' })}
+            />
+          </div>
+        ) : null}
+
         {loading ? (
-          <div className='text-sm text-gray-500'>加载中…</div>
-        ) : error ? (
-          <div className='rounded-2xl bg-white p-4 shadow-sm'>
-            <div className='font-bold text-gray-900'>加载失败</div>
-            <div className='mt-1 text-sm text-gray-500'>{error}</div>
-          </div>
-        ) : orders.length === 0 ? (
-          <div className='rounded-2xl bg-white p-8 text-center text-gray-500 shadow-sm'>
-            暂无点菜记录
-          </div>
-        ) : (
           <div className='space-y-4'>
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className='bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden'
-              >
-                <div className='flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100'>
-                  <span className='text-xs text-gray-500'>{formatDate(order.createdAt)}</span>
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs font-bold ${
-                      order.status === 'new'
-                        ? 'bg-amber-100 text-amber-700'
-                        : order.status === 'cooking'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-green-100 text-green-700'
-                    }`}
-                  >
-                    {statusLabel[order.status] ?? order.status}
-                  </span>
-                </div>
-                <div className='p-4 space-y-2'>
-                  {order.items.map((item) => (
-                    <div
-                      key={`${order.id}-${item.menuItemId}`}
-                      className='flex justify-between text-sm'
-                    >
-                      <span className='text-gray-800'>
-                        {item.name} x{item.quantity}
-                      </span>
-                      <span className='text-red-600 font-bold'>¥{item.subtotal}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className='px-4 py-3 bg-gray-50 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-sm font-bold text-gray-900'>合计</span>
-                    <span className='text-lg font-extrabold text-red-600'>¥{order.totalPrice}</span>
-                  </div>
-                  <div className='flex flex-wrap items-center gap-2 justify-end'>
-                    {order.status === 'new' && (
-                      <button
-                        type='button'
-                        disabled={updatingId === order.id}
-                        onClick={() => patchStatus(order.id, 'cooking')}
-                        className='text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 disabled:opacity-50'
-                      >
-                        {updatingId === order.id ? '处理中…' : '开始制作'}
-                      </button>
-                    )}
-                    {(order.status === 'new' || order.status === 'cooking') && (
-                      <button
-                        type='button'
-                        disabled={updatingId === order.id}
-                        onClick={() => patchStatus(order.id, 'done')}
-                        className='text-xs bg-amber-400 text-gray-900 font-bold px-3 py-1.5 rounded-lg hover:bg-amber-300 disabled:opacity-50'
-                      >
-                        {updatingId === order.id ? '处理中…' : '上菜'}
-                      </button>
-                    )}
-                    <button
-                      type='button'
-                      onClick={() => handleDelete(order.id)}
-                      disabled={deletingId === order.id}
-                      className='text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-100 disabled:opacity-50'
-                    >
-                      {deletingId === order.id ? '删除中…' : '删除'}
-                    </button>
-                  </div>
-                </div>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className='rounded-2xl bg-surface p-5 shadow-card'>
+                <div className='h-4 w-1/4 animate-pulse rounded bg-paper-deep' />
+                <div className='mt-3 h-3 w-full animate-pulse rounded bg-paper-deep' />
               </div>
             ))}
           </div>
+        ) : error ? (
+          <div className='rounded-2xl bg-surface p-5 shadow-card'>
+            <div className='font-bold'>加载失败</div>
+            <div className='mt-1 text-sm text-ink-soft'>{error}</div>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className='flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line-strong bg-surface/50 py-16 text-center'>
+            <IconReceipt className='h-8 w-8 text-ink-faint' />
+            <p className='text-sm text-ink-soft'>暂无点菜记录</p>
+          </div>
+        ) : (
+          <div className='space-y-4'>
+            {orders.map((order) => {
+              const meta = statusMeta[order.status] ?? {
+                label: order.status,
+                cls: 'bg-paper-deep text-ink-soft',
+              };
+              return (
+                <div
+                  key={order.id}
+                  className='overflow-hidden rounded-2xl border border-line bg-surface shadow-card'
+                >
+                  <div className='flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3'>
+                    <span className='tnum text-xs text-ink-soft'>
+                      #{order.id.slice(-6)} · {formatDate(order.createdAt)}
+                    </span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.cls}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <div className='space-y-2 p-4'>
+                    {order.items.map((item) => (
+                      <div
+                        key={`${order.id}-${item.menuItemId}`}
+                        className='flex justify-between text-sm'
+                      >
+                        <span className='text-ink'>
+                          {item.name}
+                          <span className='tnum ml-1 text-ink-faint'>×{item.quantity}</span>
+                        </span>
+                        <span className='tnum font-semibold text-ink-soft'>¥{item.subtotal}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className='flex flex-col gap-3 bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between'>
+                    <div className='flex items-baseline gap-1.5'>
+                      <span className='text-sm font-semibold text-ink'>合计</span>
+                      <span className='tnum text-xl font-bold text-ember'>¥{order.totalPrice}</span>
+                    </div>
+                    <div className='flex flex-wrap items-center justify-end gap-2'>
+                      {order.status === 'new' && (
+                        <button
+                          type='button'
+                          disabled={updatingId === order.id}
+                          onClick={() => patchStatus(order.id, 'cooking')}
+                          className='rounded-lg border border-gold/30 bg-gold-soft px-3 py-1.5 text-xs font-semibold text-gold hover:bg-gold/10 disabled:opacity-50'
+                        >
+                          {updatingId === order.id ? '处理中…' : '开始制作'}
+                        </button>
+                      )}
+                      {(order.status === 'new' || order.status === 'cooking') && (
+                        <button
+                          type='button'
+                          disabled={updatingId === order.id}
+                          onClick={() => patchStatus(order.id, 'done')}
+                          className='rounded-lg bg-leaf px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50'
+                        >
+                          {updatingId === order.id ? '处理中…' : '上菜'}
+                        </button>
+                      )}
+                      <button
+                        type='button'
+                        onClick={() => setDeleteTarget(order)}
+                        disabled={deletingId === order.id}
+                        className='rounded-lg border border-ember/20 bg-ember-soft px-3 py-1.5 text-xs font-semibold text-ember hover:bg-ember/10 disabled:opacity-50'
+                      >
+                        {deletingId === order.id ? '删除中…' : '删除'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
+      <ConfirmDialog
+        open={deleteTarget != null}
+        title='删除订单'
+        description={
+          deleteTarget
+            ? `确定删除订单 #${deleteTarget.id.slice(-6)} 吗？后厨记录会同步移除。`
+            : ''
+        }
+        confirmText='删除'
+        danger
+        loading={deleteTarget != null && deletingId === deleteTarget.id}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -23,7 +23,7 @@ export default function AdminLogoutButton() {
       type='button'
       onClick={handleLogout}
       disabled={loading}
-      className='rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50'
+      className='rounded-full border border-ember/30 bg-ember-soft px-4 py-2 text-sm font-semibold text-ember hover:bg-ember/10 disabled:opacity-50'
     >
       {loading ? '退出中…' : '退出登录'}
     </button>
