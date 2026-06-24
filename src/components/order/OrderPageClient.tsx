@@ -7,6 +7,7 @@ import {
   IconChili,
   IconClose,
   IconMinus,
+  IconNote,
   IconPlus,
   IconReceipt,
 } from '@/components/ui/icons';
@@ -16,6 +17,8 @@ import { saveOrderHistory } from '@/lib/orderHistory';
 type Cart = Record<string, number>;
 
 const CART_STORAGE_KEY = 'order_cart_v1';
+const ORDER_NOTE_STORAGE_KEY = 'order_note_v1';
+const MAX_NOTE_LENGTH = 80;
 
 function formatPrice(price: number) {
   return price.toFixed(2);
@@ -29,6 +32,7 @@ export default function OrderPageClient() {
   const [loadError, setLoadError] = useState<string>('');
 
   const [cart, setCart] = useState<Cart>({});
+  const [orderNote, setOrderNote] = useState('');
   const [cartHydrated, setCartHydrated] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('stirfry');
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -78,6 +82,7 @@ export default function OrderPageClient() {
         const parsed = JSON.parse(raw) as Cart;
         if (parsed && typeof parsed === 'object') setCart(parsed);
       }
+      setOrderNote(localStorage.getItem(ORDER_NOTE_STORAGE_KEY) ?? '');
     } catch {
       // 忽略损坏数据
     } finally {
@@ -95,6 +100,17 @@ export default function OrderPageClient() {
       // 忽略写入失败
     }
   }, [cart, cartHydrated]);
+
+  useEffect(() => {
+    if (!cartHydrated) return;
+    try {
+      const note = orderNote.trim();
+      if (!note) localStorage.removeItem(ORDER_NOTE_STORAGE_KEY);
+      else localStorage.setItem(ORDER_NOTE_STORAGE_KEY, note);
+    } catch {
+      // 忽略写入失败
+    }
+  }, [orderNote, cartHydrated]);
 
   useEffect(() => {
     if (Object.keys(cart).length === 0) setIsCartOpen(false);
@@ -204,12 +220,14 @@ export default function OrderPageClient() {
 
   const clearCart = () => {
     setCart({});
+    setOrderNote('');
     setIsCartOpen(false);
     setConfirmClearOpen(false);
   };
 
   const placeOrder = async () => {
     if (totalCount <= 0 || isPlacingOrder) return;
+    const note = orderNote.trim();
     const orderItems = Object.entries(cart)
       .filter(([, qty]) => qty > 0)
       .map(([id, quantity]) => {
@@ -241,7 +259,7 @@ export default function OrderPageClient() {
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, note }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.msg || '点菜失败');
@@ -256,6 +274,7 @@ export default function OrderPageClient() {
             : new Date().toISOString(),
         totalCount: snapshotTotalCount,
         totalPrice: snapshotTotalPrice,
+        note,
         items: orderItems.map(({ name, quantity, subtotal }) => ({
           name,
           quantity,
@@ -263,6 +282,7 @@ export default function OrderPageClient() {
         })),
       });
       setCart({});
+      setOrderNote('');
       setIsCartOpen(false);
       const suffix = orderId.startsWith('local-') ? '' : orderId.slice(-6);
       showToast(`点菜成功${suffix ? `（#${suffix}）` : ''}`, 'success');
@@ -526,11 +546,13 @@ export default function OrderPageClient() {
           </button>
           <button
             type='button'
-            onClick={placeOrder}
+            onClick={() => {
+              if (totalCount > 0) setIsCartOpen(true);
+            }}
             disabled={totalCount <= 0 || isPlacingOrder}
             className='shrink-0 rounded-full bg-ember px-7 py-3 font-bold text-white shadow-card transition-all active:scale-95 disabled:bg-paper-deep disabled:text-ink-faint disabled:shadow-none'
           >
-            {totalCount > 0 ? (isPlacingOrder ? '提交中…' : '下单') : '下单'}
+            {totalCount > 0 ? '去结算' : '下单'}
           </button>
         </div>
       </div>
@@ -562,56 +584,78 @@ export default function OrderPageClient() {
               {cartItemIds.length === 0 ? (
                 <div className='py-12 text-center text-sm text-ink-faint'>还未点菜</div>
               ) : (
-                <ul className='py-2'>
-                  {cartItemIds.map((id) => {
-                    const item = menuById.get(id);
-                    const qty = cart[id] ?? 0;
-                    if (!item || qty <= 0) return null;
-                    return (
-                      <li
-                        key={id}
-                        className='flex items-center gap-3 border-b border-line py-3 last:border-0'
-                      >
-                        <div className='relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-paper-deep'>
-                          <Image
-                            src={item.img}
-                            alt={item.name}
-                            fill
-                            sizes='56px'
-                            className='object-cover'
-                          />
-                        </div>
-                        <div className='flex-1 min-w-0'>
-                          <div className='font-medium text-ink truncate'>{item.name}</div>
-                          <div className='tnum mt-0.5 text-xs text-ember font-semibold'>
-                            ¥{formatPrice(item.price)} × {qty}
+                <>
+                  <ul className='py-2'>
+                    {cartItemIds.map((id) => {
+                      const item = menuById.get(id);
+                      const qty = cart[id] ?? 0;
+                      if (!item || qty <= 0) return null;
+                      return (
+                        <li
+                          key={id}
+                          className='flex items-center gap-3 border-b border-line py-3 last:border-0'
+                        >
+                          <div className='relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-paper-deep'>
+                            <Image
+                              src={item.img}
+                              alt={item.name}
+                              fill
+                              sizes='56px'
+                              className='object-cover'
+                            />
                           </div>
-                        </div>
-                        <div className='flex items-center gap-2 shrink-0'>
-                          <button
-                            type='button'
-                            onClick={() => updateCart(item.id, -1)}
-                            className='flex h-7 w-7 items-center justify-center rounded-full border border-line-strong text-ink-soft active:scale-90 transition-transform'
-                            aria-label={`减少 ${item.name}`}
-                          >
-                            <IconMinus className='h-3.5 w-3.5' />
-                          </button>
-                          <span className='tnum w-5 text-center text-sm font-semibold text-ink'>
-                            {qty}
-                          </span>
-                          <button
-                            type='button'
-                            onClick={() => updateCart(item.id, 1)}
-                            className='flex h-7 w-7 items-center justify-center rounded-full bg-ember text-white active:scale-90 transition-transform'
-                            aria-label={`添加 ${item.name}`}
-                          >
-                            <IconPlus className='h-3.5 w-3.5' />
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                          <div className='flex-1 min-w-0'>
+                            <div className='font-medium text-ink truncate'>{item.name}</div>
+                            <div className='tnum mt-0.5 text-xs text-ember font-semibold'>
+                              ¥{formatPrice(item.price)} × {qty}
+                            </div>
+                          </div>
+                          <div className='flex items-center gap-2 shrink-0'>
+                            <button
+                              type='button'
+                              onClick={() => updateCart(item.id, -1)}
+                              className='flex h-7 w-7 items-center justify-center rounded-full border border-line-strong text-ink-soft active:scale-90 transition-transform'
+                              aria-label={`减少 ${item.name}`}
+                            >
+                              <IconMinus className='h-3.5 w-3.5' />
+                            </button>
+                            <span className='tnum w-5 text-center text-sm font-semibold text-ink'>
+                              {qty}
+                            </span>
+                            <button
+                              type='button'
+                              onClick={() => updateCart(item.id, 1)}
+                              className='flex h-7 w-7 items-center justify-center rounded-full bg-ember text-white active:scale-90 transition-transform'
+                              aria-label={`添加 ${item.name}`}
+                            >
+                              <IconPlus className='h-3.5 w-3.5' />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <label className='mb-4 block rounded-2xl border border-line bg-paper/70 p-3'>
+                    <span className='flex items-center gap-1.5 text-xs font-bold text-ink-soft'>
+                      <IconNote className='h-4 w-4 text-gold' />
+                      桌号 / 口味备注
+                    </span>
+                    <textarea
+                      value={orderNote}
+                      onChange={(event) =>
+                        setOrderNote(event.target.value.slice(0, MAX_NOTE_LENGTH))
+                      }
+                      maxLength={MAX_NOTE_LENGTH}
+                      rows={3}
+                      className='mt-2 w-full resize-none rounded-xl border border-line bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-ember/50'
+                      placeholder='例：3号桌，少辣，不要香菜'
+                    />
+                    <span className='mt-1 block text-right text-[11px] text-ink-faint'>
+                      {orderNote.length}/{MAX_NOTE_LENGTH}
+                    </span>
+                  </label>
+                </>
               )}
             </div>
             <div className='border-t border-line p-4'>

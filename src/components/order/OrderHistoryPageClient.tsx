@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ConfirmDialog } from '@/components/ui/Feedback';
-import { IconBowl, IconChevronRight, IconReceipt } from '@/components/ui/icons';
+import {
+  IconBowl,
+  IconChevronRight,
+  IconNote,
+  IconReceipt,
+} from '@/components/ui/icons';
 import {
   clearOrderHistory,
   loadOrderHistory,
@@ -114,6 +119,14 @@ export default function OrderHistoryPageClient() {
                     </div>
                   ))}
                 </div>
+                {order.note ? (
+                  <div className='border-t border-line bg-paper/70 px-4 py-3'>
+                    <div className='flex items-start gap-2 text-xs leading-relaxed text-ink-soft'>
+                      <IconNote className='mt-0.5 h-4 w-4 shrink-0 text-gold' />
+                      <span className='break-words'>{order.note}</span>
+                    </div>
+                  </div>
+                ) : null}
               </article>
             ))}
 

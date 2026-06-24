@@ -9,6 +9,7 @@ export type SavedOrder = {
   createdAt: string;
   totalCount: number;
   totalPrice: number;
+  note: string;
   items: SavedOrderItem[];
 };
 
@@ -27,6 +28,13 @@ function isSavedOrder(value: unknown): value is SavedOrder {
   );
 }
 
+function normalizeSavedOrder(order: SavedOrder): SavedOrder {
+  return {
+    ...order,
+    note: typeof order.note === 'string' ? order.note : '',
+  };
+}
+
 export function loadOrderHistory(): SavedOrder[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -34,7 +42,7 @@ export function loadOrderHistory(): SavedOrder[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isSavedOrder);
+    return parsed.filter(isSavedOrder).map(normalizeSavedOrder);
   } catch {
     return [];
   }
